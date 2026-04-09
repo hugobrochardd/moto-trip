@@ -1,4 +1,12 @@
+package com.example.mototripeval.service;
 
+import java.util.List;
+
+import com.example.mototripeval.entity.Trip;
+import com.example.mototripeval.entity.User;
+import com.example.mototripeval.repository.TripRepository;
+import com.example.mototripeval.repository.UserRepository;
+import org.springframework.stereotype.Service;
 
 @Service
 public class TripService {

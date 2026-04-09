@@ -1,7 +1,19 @@
+package com.example.mototripeval.entity;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+
 @Entity
 public class Trip {
+
     @Id @GeneratedValue
     private Long id;
+
     private String name;
     private int maxParticipants;
     private boolean premiumOnly;
@@ -44,4 +56,6 @@ public class Trip {
     public int remainingPlaces() {
         return maxParticipants - participants.size();
     }
+
+    // getters
 }
