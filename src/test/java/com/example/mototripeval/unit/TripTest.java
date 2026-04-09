@@ -50,6 +50,19 @@ class TripTest {
     }
 
     @Test
+    void join_shouldAcceptPremiumUserForPremiumTrip() {
+        Trip trip = new Trip("VIP Ride", 2, true);
+        User user = new User("Bob", true);
+
+        trip.join(user);
+
+        List<User> participants = field(trip, "participants");
+        assertThat(participants).containsExactly(user);
+        assertThat(intField(user, "points")).isEqualTo(10);
+        assertThat(trip.remainingPlaces()).isEqualTo(1);
+    }
+
+    @Test
     void join_shouldRejectWhenTripIsFull() {
         Trip trip = new Trip("Small Ride", 1, false);
         trip.join(new User("Alice", false));

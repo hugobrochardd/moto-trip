@@ -194,6 +194,24 @@ class TripControllerMockMvcTest {
     }
 
     @Test
+    void postStart_shouldRejectWhenTripHasNoParticipants() throws Exception {
+        Trip trip = tripRepository.save(new Trip("Empty Ride", 2, false));
+
+        Throwable thrown = catchThrowable(() -> mockMvc.perform(post("/api/trips/{id}/start", longField(trip, "id"))));
+
+        assertThat(thrown).hasRootCauseInstanceOf(RuntimeException.class);
+        assertThat(thrown).hasRootCauseMessage("No participants");
+    }
+
+    @Test
+    void postStart_shouldRejectWhenTripDoesNotExist() throws Exception {
+        Throwable thrown = catchThrowable(() -> mockMvc.perform(post("/api/trips/{id}/start", 999)));
+
+        assertThat(thrown).hasRootCauseInstanceOf(RuntimeException.class);
+        assertThat(thrown).hasRootCauseMessage("Trip not found");
+    }
+
+    @Test
     void getTrips_shouldReturnAllExistingTrips() throws Exception {
         tripRepository.save(new Trip("Ride One", 2, false));
         tripRepository.save(new Trip("Ride Two", 3, true));

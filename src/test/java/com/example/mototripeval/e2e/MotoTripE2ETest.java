@@ -1,10 +1,11 @@
 package com.example.mototripeval.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
 
@@ -14,15 +15,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.web.context.WebApplicationContext;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class MotoTripE2ETest {
 
     @Autowired
@@ -34,63 +31,52 @@ class MotoTripE2ETest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
-    private WebApplicationContext webApplicationContext;
+    @LocalServerPort
+    private int port;
 
-    private MockMvc mockMvc;
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
     @BeforeEach
     void cleanDatabase() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build();
         tripRepository.deleteAll();
         userRepository.deleteAll();
     }
 
     @Test
     void shouldCreateUserCreateTripJoinStartAndExposeStartedTrip() throws Exception {
-        MvcResult userResponse = mockMvc.perform(post("/api/users")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "name", "Alice",
-                                "premium", true
-                        ))))
-                .andExpect(status().isOk())
-                .andReturn();
-        MvcResult tripResponse = mockMvc.perform(post("/api/trips")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of(
-                                "name", "Alps Ride",
-                                "maxParticipants", 2,
-                                "premiumOnly", false
-                        ))))
-                .andExpect(status().isOk())
-                .andReturn();
+        HttpResponse<String> userResponse = postJson(
+                "/api/users",
+                Map.of("name", "Alice", "premium", true)
+        );
+        HttpResponse<String> tripResponse = postJson(
+                "/api/trips",
+                Map.of("name", "Alps Ride", "maxParticipants", 2, "premiumOnly", false)
+        );
 
-        Map<String, Object> userBody = objectMapper.readValue(userResponse.getResponse().getContentAsString(), new TypeReference<>() {
+        Map<String, Object> userBody = objectMapper.readValue(userResponse.body(), new TypeReference<>() {
         });
-        Map<String, Object> tripBody = objectMapper.readValue(tripResponse.getResponse().getContentAsString(), new TypeReference<>() {
+        Map<String, Object> tripBody = objectMapper.readValue(tripResponse.body(), new TypeReference<>() {
         });
         Long userId = asLong(userBody.get("id"));
         Long tripId = asLong(tripBody.get("id"));
 
-        MvcResult joinResponse = mockMvc.perform(post("/api/trips/{id}/join", tripId)
-                        .param("userId", String.valueOf(userId)))
-                .andExpect(status().isOk())
-                .andReturn();
-        MvcResult startResponse = mockMvc.perform(post("/api/trips/{id}/start", tripId))
-                .andExpect(status().isOk())
-                .andReturn();
-        MvcResult tripsResponse = mockMvc.perform(get("/api/trips"))
-                .andExpect(status().isOk())
-                .andReturn();
-        List<Map<String, Object>> tripsBody = objectMapper.readValue(tripsResponse.getResponse().getContentAsString(), new TypeReference<>() {
+        HttpResponse<String> joinResponse = postWithoutBody(
+                "/api/trips/" + tripId + "/join?userId=" + userId
+        );
+        HttpResponse<String> startResponse = postWithoutBody(
+                "/api/trips/" + tripId + "/start"
+        );
+        HttpResponse<String> tripsResponse = get(
+                "/api/trips"
+        );
+        List<Map<String, Object>> tripsBody = objectMapper.readValue(tripsResponse.body(), new TypeReference<>() {
         });
 
-        assertThat(userResponse.getResponse().getStatus()).isEqualTo(200);
-        assertThat(tripResponse.getResponse().getStatus()).isEqualTo(200);
-        assertThat(joinResponse.getResponse().getStatus()).isEqualTo(200);
-        assertThat(startResponse.getResponse().getStatus()).isEqualTo(200);
-        assertThat(tripsResponse.getResponse().getStatus()).isEqualTo(200);
+        assertThat(userResponse.statusCode()).isEqualTo(200);
+        assertThat(tripResponse.statusCode()).isEqualTo(200);
+        assertThat(joinResponse.statusCode()).isEqualTo(200);
+        assertThat(startResponse.statusCode()).isEqualTo(200);
+        assertThat(tripsResponse.statusCode()).isEqualTo(200);
 
         Map<String, Object> startedTrip = tripsBody.get(0);
         List<Map<String, Object>> participants = (List<Map<String, Object>>) startedTrip.get("participants");
@@ -105,5 +91,34 @@ class MotoTripE2ETest {
 
     private Long asLong(Object value) {
         return ((Number) value).longValue();
+    }
+
+    private HttpResponse<String> postJson(String path, Map<String, Object> body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> postWithoutBody(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + path))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> get(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl() + path))
+                .GET()
+                .build();
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private String baseUrl() {
+        return "http://localhost:" + port;
     }
 }
